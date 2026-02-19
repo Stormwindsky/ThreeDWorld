@@ -31,7 +31,7 @@
 <body>
 
 <div id="ui-layer">
-    <h1>ThreeDWorld</h1>
+    <h1 id="main-title">ThreeDWorld</h1>
 </div>
 <div id="audio-hint">Click anywhere to play music</div>
 
@@ -52,7 +52,6 @@
         music: 'https://raw.githubusercontent.com/Stormwindsky/ThreeDWorld/main/Sources/Audio/music/Main_Menu.wav'
     };
 
-    // --- DICTIONNAIRE COMPLET DES LANGUES ---
     const translations = {
         en: { play: "Play", settings: "Settings", source: "Source Code", credits: "Notes & Credits", back: "Back", load: "Drag & Drop .tdg file" },
         fr: { play: "Jouer", settings: "Paramètres", source: "Code Source", credits: "Notes & Crédits", back: "Retour", load: "Glissez/Chargez .tdg" },
@@ -62,17 +61,19 @@
         ja: { play: "プレイ", settings: "設定", source: "ソース", credits: "クレジット", back: "戻る", load: ".tdgファイルをロード" }
     };
 
-    let currentLang = 'en';
+    // --- LOGIQUE DE SAUVEGARDE ---
+    // On récupère la langue sauvegardée, sinon on met 'en' par défaut
+    let currentLang = localStorage.getItem('tdw_lang') || 'en';
+
     let audioStarted = false;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Améliore la netteté
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
-    // --- CHARGEMENT HAUTE QUALITÉ ---
     const loader = new THREE.TextureLoader();
     loader.load(ASSETS.sky, (texture) => {
         texture.magFilter = THREE.LinearFilter;
@@ -143,7 +144,12 @@
                 {n: "Español (ES)", v: 'es'}, {n: "Español (LATAM)", v: 'es_AM'}, {n: "日本語", v: 'ja'}
             ];
             opts.forEach((o, i) => {
-                const b = createButton(o.n, 1.8 - (i * 0.7), () => { currentLang = o.v; renderMenu('main'); });
+                const b = createButton(o.n, 1.8 - (i * 0.7), () => { 
+                    currentLang = o.v; 
+                    localStorage.setItem('tdw_lang', o.v); // SAUVEGARDE ICI
+                    renderMenu('settings'); // On reste dans settings pour voir le changement
+                });
+                // Effet visuel sur la langue active
                 if(currentLang === o.v) b.children[0].material.emissive.setHex(0x004400);
                 menuGroup.add(b);
             });
