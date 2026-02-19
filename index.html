@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ThreeDWorld - Main Menu</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         #ui-layer {
             position: absolute;
             top: 5%;
@@ -31,7 +31,7 @@
 <body>
 
 <div id="ui-layer">
-    <h1 id="main-title">ThreeDWorld</h1>
+    <h1>ThreeDWorld</h1>
 </div>
 <div id="audio-hint">Click anywhere to play music</div>
 
@@ -46,6 +46,7 @@
 <script type="module">
     import * as THREE from 'three';
 
+    // --- CONFIGURATION & ASSETS ---
     const ASSETS = {
         sky: 'https://raw.githubusercontent.com/Stormwindsky/ThreeDWorld/main/Sources/Images/Skybox/Night%20or%20Space.png',
         moon: 'https://raw.githubusercontent.com/Stormwindsky/ThreeDWorld/main/Sources/Images/Skybox/Moon.png',
@@ -53,37 +54,35 @@
     };
 
     const translations = {
-        en: { play: "Play", settings: "Settings", source: "Source Code", credits: "Notes & Credits", back: "Back", load: "Drag & Drop .tdg file" },
-        fr: { play: "Jouer", settings: "Paramètres", source: "Code Source", credits: "Notes & Crédits", back: "Retour", load: "Glissez/Chargez .tdg" },
-        fr_CA: { play: "Jouer", settings: "Réglages", source: "Code Source", credits: "Notes & Crédits", back: "Retour", load: "Déposez .tdg ici" },
-        es: { play: "Jugar", settings: "Ajustes", source: "Código Fuente", credits: "Créditos", back: "Volver", load: "Suelte archivo .tdg" },
-        es_AM: { play: "Jugar", settings: "Configuración", source: "Código Fuente", credits: "Créditos", back: "Atrás", load: "Cargue archivo .tdg" },
-        ja: { play: "プレイ", settings: "設定", source: "ソース", credits: "クレジット", back: "戻る", load: ".tdgファイルをロード" }
+        en: { play: "Play", editor: "Editor Mode", settings: "Settings", source: "Source Code", credits: "Notes & Credits", back: "Back" },
+        fr: { play: "Jouer un monde", editor: "Mode Éditeur", settings: "Paramètres", source: "Code Source", credits: "Notes & Crédits", back: "Retour" },
+        fr_CA: { play: "Jouer un monde", editor: "Mode Éditeur", settings: "Réglages", source: "Code Source", credits: "Notes & Crédits", back: "Retour" },
+        es: { play: "Jugar Mundo", editor: "Modo Editor", settings: "Ajustes", source: "Código Fuente", credits: "Créditos", back: "Volver" },
+        es_AM: { play: "Jugar Mundo", editor: "Modo Editor", settings: "Configuración", source: "Código Fuente", credits: "Créditos", back: "Atrás" },
+        ja: { play: "プレイ", editor: "エディターモード", settings: "設定", source: "ソース", credits: "クレジット", back: "戻る" }
     };
 
-    // --- LOGIQUE DE SAUVEGARDE ---
-    // On récupère la langue sauvegardée, sinon on met 'en' par défaut
+    // --- CHARGEMENT DE LA LANGUE SAUVEGARDÉE ---
     let currentLang = localStorage.getItem('tdw_lang') || 'en';
-
     let audioStarted = false;
 
+    // --- SCENE SETUP ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
+    // --- SKYBOX & MOON ---
     const loader = new THREE.TextureLoader();
     loader.load(ASSETS.sky, (texture) => {
-        texture.magFilter = THREE.LinearFilter;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
         scene.background = texture;
     });
 
     const moonTex = loader.load(ASSETS.moon);
-    const moonMaterial = new THREE.SpriteMaterial({ map: moonTex, transparent: true });
+    const moonMaterial = new THREE.SpriteMaterial({ map: moonTex, transparent: true, opacity: 0.9 });
     const moon = new THREE.Sprite(moonMaterial);
     moon.position.set(18, 12, -25);
     moon.scale.set(10, 10, 1);
@@ -97,11 +96,17 @@
     pointLight.position.set(0, 2, 5);
     scene.add(pointLight);
 
+    // --- AUDIO ---
     const listener = new THREE.AudioListener();
     camera.add(listener);
     const sound = new THREE.Audio(listener);
-    new THREE.AudioLoader().load(ASSETS.music, (buf) => { sound.setBuffer(buf); sound.setLoop(true); sound.setVolume(0.5); });
+    new THREE.AudioLoader().load(ASSETS.music, (buf) => {
+        sound.setBuffer(buf);
+        sound.setLoop(true);
+        sound.setVolume(0.4);
+    });
 
+    // --- BOUTONS ---
     function createButton(text, y, callback) {
         const group = new THREE.Group();
         const geometry = new THREE.BoxGeometry(4.2, 0.65, 0.2);
@@ -112,7 +117,7 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 512; canvas.height = 128;
         ctx.fillStyle = '#00d4ff';
-        ctx.font = 'bold 40px Arial';
+        ctx.font = 'bold 38px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(text.toUpperCase(), 256, 80);
 
@@ -133,10 +138,20 @@
         const t = translations[currentLang];
 
         if (type === 'main') {
-            menuGroup.add(createButton(t.play, 1.4, () => alert(t.load)));
-            menuGroup.add(createButton(t.settings, 0.5, () => renderMenu('settings')));
-            menuGroup.add(createButton(t.credits, -0.4, () => window.open('https://github.com/Stormwindsky/ThreeDWorld/blob/main/Notice.md', '_blank')));
-            menuGroup.add(createButton(t.source, -1.3, () => window.open('https://github.com/Stormwindsky/ThreeDWorld', '_blank')));
+            // BOUTON JOUER (Mode Play)
+            menuGroup.add(createButton(t.play, 1.4, () => {
+                window.location.href = `Editor.html?mode=play&lang=${currentLang}`;
+            }));
+            // BOUTON ÉDITEUR (Mode Editor)
+            menuGroup.add(createButton(t.editor, 0.5, () => {
+                window.location.href = `Editor.html?mode=editor&lang=${currentLang}`;
+            }));
+            // SETTINGS
+            menuGroup.add(createButton(t.settings, -0.4, () => renderMenu('settings')));
+            // CREDITS
+            menuGroup.add(createButton(t.credits, -1.3, () => {
+                window.open('https://github.com/Stormwindsky/ThreeDWorld/blob/main/Notice.md', '_blank');
+            }));
         } 
         else if (type === 'settings') {
             const opts = [
@@ -146,10 +161,9 @@
             opts.forEach((o, i) => {
                 const b = createButton(o.n, 1.8 - (i * 0.7), () => { 
                     currentLang = o.v; 
-                    localStorage.setItem('tdw_lang', o.v); // SAUVEGARDE ICI
-                    renderMenu('settings'); // On reste dans settings pour voir le changement
+                    localStorage.setItem('tdw_lang', o.v);
+                    renderMenu('settings'); 
                 });
-                // Effet visuel sur la langue active
                 if(currentLang === o.v) b.children[0].material.emissive.setHex(0x004400);
                 menuGroup.add(b);
             });
@@ -157,14 +171,17 @@
         }
     }
 
+    // --- INTERACTIONS ---
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
     window.addEventListener('click', (e) => {
         if (!audioStarted && sound.buffer) { sound.play(); audioStarted = true; document.getElementById('audio-hint').style.display = 'none'; }
+        
         mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
+        
         const intersects = raycaster.intersectObjects(menuGroup.children, true);
         if (intersects.length > 0) {
             let target = intersects[0].object;
@@ -173,23 +190,29 @@
         }
     });
 
+    // --- LOOP ---
     camera.position.z = 8;
     function animate() {
         requestAnimationFrame(animate);
+        
+        // Animation subtile du décor
+        moon.position.y = 12 + Math.sin(Date.now() * 0.001) * 0.5;
+
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(menuGroup.children, true);
         
         menuGroup.children.forEach(btn => {
             btn.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
-            btn.children[0].material.emissive.setHex(btn.children[0].material.emissive.getHex());
         });
 
         if (intersects.length > 0) {
             let target = intersects[0].object;
             while (target.parent && !target.userData.callback) target = target.parent;
-            target.scale.lerp(new THREE.Vector3(1.08, 1.08, 1.08), 0.2);
+            target.scale.lerp(new THREE.Vector3(1.1, 1.1, 1.1), 0.2);
             document.body.style.cursor = 'pointer';
-        } else { document.body.style.cursor = 'default'; }
+        } else {
+            document.body.style.cursor = 'default';
+        }
 
         renderer.render(scene, camera);
     }
