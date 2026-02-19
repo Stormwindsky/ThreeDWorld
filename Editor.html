@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ThreeDWorld - Editor / Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        #ui {
+            position: absolute; top: 15px; left: 15px;
+            background: rgba(0, 0, 0, 0.85); padding: 15px;
+            border-radius: 8px; color: white; z-index: 10;
+            border: 1px solid #00d4ff; width: 280px;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+        }
+        .mode-indicator { padding: 5px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 10px; display: inline-block; font-size: 12px; letter-spacing: 1px; }
+        .edit-mode { background: #00d4ff; color: #000; }
+        .play-mode { background: #2ecc71; color: #000; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 14px; height: 14px;
+            border: 2px solid #00d4ff;
+            border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 5; display: none;
+        }
+        .controls-hint { font-size: 11px; line-height: 1.5; color: #ccc; margin-top: 10px; }
+        b { color: #00d4ff; }
+        input[type="file"] { margin-top: 10px; width: 100%; color: #00d4ff; font-size: 12px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="modeTag" class="mode-indicator edit-mode">STUDIO</div>
+        <div id="fileSection">
+            <label id="labelLoad" style="font-size: 13px;"></label>
+            <input type="file" id="fileInput">
+        </div>
+        <div id="instructions" class="controls-hint"></div>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- PARAMÈTRES ET LANGUES ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode') || 'editor'; 
+        let currentLang = urlParams.get('lang') || localStorage.getItem('tdw_lang') || 'en';
+
+        const translations = {
+            en: { studio: "STUDIO MODE", gameplay: "GAMEPLAY MODE", loadEdit: "Load .rbxmx or .tdw", loadPlay: "Load .tdw World", 
+                  instr: "1. <b>W,A,S,D</b> to move<br>2. <b>Right Click</b> to look<br>3. <b>Double-Right Click</b> to spawn<br>4. <b>ESC</b> to exit" },
+            fr: { studio: "MODE STUDIO", gameplay: "MODE GAMEPLAY", loadEdit: "Charger .rbxmx ou .tdw", loadPlay: "Charger Monde .tdw", 
+                  instr: "1. <b>Z,Q,S,D</b> pour bouger<br>2. <b>Clic Droit</b> pour regarder<br>3. <b>Double-Clic Droit</b> pour spawner<br>4. <b>ESC</b> pour quitter" },
+            fr_CA: { studio: "MODE STUDIO", gameplay: "MODE JEU", loadEdit: "Charger .rbxmx ou .tdw", loadPlay: "Charger Monde .tdw", 
+                     instr: "1. <b>Z,Q,S,D</b> pour bouger<br>2. <b>Clic Droit</b> pour viser<br>3. <b>Double-Clic Droit</b> pour spawner<br>4. <b>ESC</b> pour quitter" },
+            es: { studio: "MODO ESTUDIO", gameplay: "MODO JUEGO", loadEdit: "Cargar .rbxmx o .tdw", loadPlay: "Cargar Mundo .tdw", 
+                  instr: "1. <b>W,A,S,D</b> para mover<br>2. <b>Clic Derecho</b> para mirar<br>3. <b>Doble Clic Derecho</b> para entrar<br>4. <b>ESC</b> para salir" },
+            es_AM: { studio: "MODO ESTUDIO", gameplay: "MODO CONFIG", loadEdit: "Cargar .rbxmx o .tdw", loadPlay: "Cargar Mundo .tdw", 
+                  instr: "1. <b>W,A,S,D</b> para mover<br>2. <b>Clic Derecho</b> para mirar<br>3. <b>Doble Clic Derecho</b> para entrar<br>4. <b>ESC</b> para salir" },
+            ja: { studio: "スタジオモード", gameplay: "ゲームプレイ", loadEdit: ".rbxmx または .tdw をロード", loadPlay: ".tdw 世界をロード", 
+                  instr: "1. <b>W,A,S,D</b> 移動<br>2. <b>右クリック</b> 視点移動<br>3. <b>ダブル右クリック</b> スポーン<br>4. <b>ESC</b> 終了" }
+        };
+
+        const t = translations[currentLang] || translations['en'];
+
+        // --- INITIALISATION UI ---
+        document.getElementById('modeTag').innerText = mode === 'editor' ? t.studio : "PLAYER";
+        document.getElementById('labelLoad').innerText = mode === 'editor' ? t.loadEdit : t.loadPlay;
+        document.getElementById('instructions').innerHTML = t.instr;
+        const fileInput = document.getElementById('fileInput');
+        fileInput.accept = mode === 'editor' ? ".rbxmx,.tdw" : ".tdw";
+
+        // --- CONFIGURATION THREE.JS ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+        camera.rotation.order = 'YXZ'; 
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(100, 200, 100);
+        scene.add(sun);
+
+        const modelGroup = new THREE.Group();
+        const collidableObjects = [];
+        scene.add(modelGroup);
+
+        const grid = new THREE.GridHelper(1000, 100, 0x00d4ff, 0x222222);
+        if(mode === 'editor') scene.add(grid);
+
+        const spawnMarker = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5), 
+            new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 })
+        );
+        scene.add(spawnMarker);
+
+        const fpsControls = new PointerLockControls(camera, document.body);
+        let isFPS = false;
+        const keys = {};
+
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // --- CONTRÔLES SOURIS ---
+        let isDragging = false;
+        document.addEventListener('mousedown', (e) => { if(e.button === 2 && !isFPS) isDragging = true; });
+        document.addEventListener('mouseup', () => isDragging = false);
+        document.addEventListener('mousemove', (e) => {
+            if (!isFPS && isDragging) {
+                camera.rotation.y -= e.movementX * 0.003;
+                camera.rotation.x -= e.movementY * 0.003;
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+            }
+        });
+
+        // Double Clic Droit pour spawner
+        let lastRightClick = 0;
+        document.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                const now = Date.now();
+                if (now - lastRightClick < 300) {
+                    isFPS = true;
+                    camera.position.copy(spawnMarker.position).y += 3.5;
+                    fpsControls.lock();
+                    updateUI();
+                }
+                lastRightClick = now;
+            }
+        });
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        fpsControls.addEventListener('unlock', () => { isFPS = false; updateUI(); });
+
+        function updateUI() {
+            const tag = document.getElementById('modeTag');
+            tag.innerText = isFPS ? t.gameplay : (mode === 'editor' ? t.studio : "PLAYER");
+            tag.className = isFPS ? "mode-indicator play-mode" : "mode-indicator edit-mode";
+            document.getElementById('crosshair').style.display = isFPS ? "block" : "none";
+        }
+
+        // --- CHARGEMENT DES FORMATS ---
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                modelGroup.clear();
+                collidableObjects.length = 0;
+                if (file.name.endsWith('.rbxmx')) parseRoblox(ev.target.result);
+                else if (file.name.endsWith('.tdw')) parseTDW(ev.target.result);
+            };
+            reader.readAsText(file);
+        });
+
+        function parseRoblox(data) {
+            const xml = new DOMParser().parseFromString(data, "text/xml");
+            Array.from(xml.getElementsByTagName("Item")).forEach(item => {
+                if (["Part", "SpawnLocation", "WedgePart"].includes(item.getAttribute("class"))) {
+                    const props = item.getElementsByTagName("Properties")[0];
+                    const size = props.querySelector('Vector3[name="size"]');
+                    const cf = props.querySelector('CoordinateFrame[name="CFrame"]');
+                    if(!size || !cf) return;
+
+                    const mesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(parseFloat(size.querySelector('X').textContent), parseFloat(size.querySelector('Y').textContent), parseFloat(size.querySelector('Z').textContent)),
+                        new THREE.MeshStandardMaterial({ color: (props.querySelector('Color3uint8')?.textContent & 0xFFFFFF) || 0xaaaaaa })
+                    );
+                    const m = [parseFloat(cf.querySelector('R00').textContent), parseFloat(cf.querySelector('R10').textContent), parseFloat(cf.querySelector('R20').textContent), 0,
+                              parseFloat(cf.querySelector('R01').textContent), parseFloat(cf.querySelector('R11').textContent), parseFloat(cf.querySelector('R21').textContent), 0,
+                              parseFloat(cf.querySelector('R02').textContent), parseFloat(cf.querySelector('R12').textContent), parseFloat(cf.querySelector('R22').textContent), 0,
+                              parseFloat(cf.querySelector('X').textContent), parseFloat(cf.querySelector('Y').textContent), parseFloat(cf.querySelector('Z').textContent), 1];
+                    mesh.applyMatrix4(new THREE.Matrix4().fromArray(m));
+                    modelGroup.add(mesh);
+                    collidableObjects.push(mesh);
+                }
+            });
+        }
+
+        function parseTDW(data) {
+            try {
+                const world = JSON.parse(data);
+                world.objects.forEach(obj => {
+                    const mesh = new THREE.Mesh(new THREE.BoxGeometry(obj.s[0], obj.s[1], obj.s[2]), new THREE.MeshStandardMaterial({ color: obj.c }));
+                    mesh.position.set(obj.p[0], obj.p[1], obj.p[2]);
+                    mesh.rotation.set(obj.r[0], obj.r[1], obj.r[2]);
+                    modelGroup.add(mesh);
+                    collidableObjects.push(mesh);
+                });
+            } catch(e) { console.error("Erreur .tdw"); }
+        }
+
+        // --- PHYSIQUE ET BOUCLE D'ANIMATION ---
+        const raycaster = new THREE.Raycaster();
+        let velocityY = 0;
+        let prevTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1);
+            prevTime = time;
+
+            if (isFPS) {
+                velocityY -= 35 * delta; // Gravité
+                const moveZ = (keys['KeyW'] || keys['KeyZ'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+                const moveX = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] || keys['KeyQ'] ? 1 : 0);
+
+                if (moveZ !== 0) fpsControls.moveForward(moveZ * 15 * delta);
+                if (moveX !== 0) fpsControls.moveRight(moveX * 15 * delta);
+
+                raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+                const inter = raycaster.intersectObjects(collidableObjects);
+                if (inter.length > 0 && inter[0].distance < 3.8) {
+                    velocityY = Math.max(0, velocityY);
+                    if (keys['Space']) velocityY = 14;
+                }
+                camera.position.y += velocityY * delta;
+            } else {
+                const speed = 60 * delta;
+                if (keys['KeyW'] || keys['KeyZ']) camera.translateZ(-speed);
+                if (keys['KeyS']) camera.translateZ(speed);
+                if (keys['KeyA'] || keys['KeyQ']) camera.translateX(-speed);
+                if (keys['KeyD']) camera.translateX(speed);
+
+                raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+                const hits = raycaster.intersectObjects([...collidableObjects, grid]);
+                if (hits.length > 0) spawnMarker.position.copy(hits[0].point);
+            }
+            renderer.render(scene, camera);
+        }
+
+        camera.position.set(50, 50, 50);
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
